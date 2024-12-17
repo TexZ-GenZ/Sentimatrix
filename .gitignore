@@ -63,7 +63,7 @@ pip-log.txt
 Thumbs.db
 
 # Application settings
-appsettings.json
+# appsettings.json
 appsettings.Development.json
 appsettings.Production.json
 !appsettings.sample.json

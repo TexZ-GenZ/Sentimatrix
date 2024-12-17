@@ -7,7 +7,7 @@ namespace MyApp
     {
         static void Main(string[] args)
         {
-            const string connectionUri = "mongodb+srv://user001:user123qwerty@cluster0.fhaer.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+            const string connectionUri = "mongodb+srv://priyanshusamal1234:%23Ppu8urlcc@sentimatrix.euu2q.mongodb.net/?retryWrites=true&w=majority&appName=Sentimatrix";
             var settings = MongoClientSettings.FromConnectionString(connectionUri);
 
             // Set the ServerApi field of the settings object to set the version of the Stable API on the client

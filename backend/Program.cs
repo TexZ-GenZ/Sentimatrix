@@ -7,6 +7,9 @@ using Microsoft.OpenApi.Models;
 using SentimatrixAPI.Hubs;
 using MongoDB.Driver;
 using Microsoft.Extensions.Options;
+using System.Net;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
+using Yarp.ReverseProxy.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +53,27 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    // Option 1: Bind to multiple ports
+    serverOptions.Listen(IPAddress.Any, 5000); // First instance
+    serverOptions.Listen(IPAddress.Any, 5001); // Second instance
+    serverOptions.Listen(IPAddress.Any, 5002); // Third instance
+
+    // Optional: Configure HTTPS if needed
+    // serverOptions.Listen(IPAddress.Any, 5443, listenOptions =>
+    // {
+    //     listenOptions.UseHttps(httpsOptions =>
+    //     {
+    //         httpsOptions.ServerCertificate = new X509Certificate2("path/to/certificate.pfx", "password");
+    //     });
+    // });
+});
+
+// Add YARP Reverse Proxy configuration
+builder.Services.AddReverseProxy()
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -66,7 +90,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<TicketHub>("/ticketHub");
 
-app.Urls.Clear();
-app.Urls.Add("http://localhost:5000");
+// Map the reverse proxy
+app.MapReverseProxy();
 
 app.Run();
