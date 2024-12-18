@@ -41,7 +41,7 @@ namespace WpfSidebarApp
                 {
                     Console.WriteLine($"Received serious ticket from: {email.SenderEmail}");
                     await UpdateDashboard();
-                    ShowNotification($"New serious ticket from {email.SenderEmail ?? "Unknown Sender"}");
+                    // ShowNotification($"New serious ticket from {email.SenderEmail ?? "Unknown Sender"}");
                 });
             });
 
