@@ -5,6 +5,8 @@ using Microsoft.Extensions.Options;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Distributed;
+using System.Text.Json;
 
 namespace SentimatrixAPI.Services
 {
@@ -12,10 +14,15 @@ namespace SentimatrixAPI.Services
     {
         private readonly IMongoCollection<Email> _emails;
         private readonly ILogger<EmailService> _logger;
+        private readonly IDistributedCache _cache;
 
-        public EmailService(IOptions<MongoDBSettings> settings, ILogger<EmailService> logger)
+        public EmailService(
+            IOptions<MongoDBSettings> settings, 
+            ILogger<EmailService> logger,
+            IDistributedCache cache)
         {
             _logger = logger;
+            _cache = cache;
             try
             {
                 var client = new MongoClient(settings.Value.ConnectionString);
@@ -32,19 +39,69 @@ namespace SentimatrixAPI.Services
             }
         }
 
-        public async Task<List<Email>> GetAsync()
+        // Cached method to get total email count
+        public async Task<long> GetTotalEmailCountAsync()
         {
-            try
+            string cacheKey = "total_email_count";
+            
+            // Try to get from cache first
+            var cachedCount = await _cache.GetStringAsync(cacheKey);
+            if (cachedCount != null)
             {
-                return await _emails.Find(_ => true)
-                                  .SortByDescending(e => e.Time)
-                                  .ToListAsync();
+                return long.Parse(cachedCount);
             }
-            catch (Exception ex)
+
+            // If not in cache, get from database
+            long totalCount = await _emails.CountDocumentsAsync(FilterDefinition<Email>.Empty);
+
+            // Cache the count for 10 minutes
+            var cacheOptions = new DistributedCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
+
+            await _cache.SetStringAsync(cacheKey, totalCount.ToString(), cacheOptions);
+
+            return totalCount;
+        }
+
+        // Cached method to get emails with optional caching
+        public async Task<List<Email>> GetAsync(bool useCache = true)
+        {
+            string cacheKey = "all_emails";
+
+            if (useCache)
             {
-                _logger.LogError($"Error retrieving emails: {ex.Message}");
-                throw;
+                // Try to get from cache first
+                var cachedEmails = await _cache.GetStringAsync(cacheKey);
+                if (cachedEmails != null)
+                {
+                    return JsonSerializer.Deserialize<List<Email>>(cachedEmails);
+                }
             }
+
+            // If not in cache or cache disabled, get from database
+            var emails = await _emails.Find(_ => true)
+                                      .SortByDescending(e => e.Time)
+                                      .ToListAsync();
+
+            // Cache the results
+            var cacheOptions = new DistributedCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
+
+            await _cache.SetStringAsync(
+                cacheKey, 
+                JsonSerializer.Serialize(emails), 
+                cacheOptions
+            );
+
+            return emails;
+        }
+
+        // Method to clear specific cache entries
+        public async Task ClearCacheAsync(string cacheKey)
+        {
+            await _cache.RemoveAsync(cacheKey);
         }
 
         public async Task<Email> GetAsync(string id)

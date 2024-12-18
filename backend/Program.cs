@@ -10,6 +10,9 @@ using Microsoft.Extensions.Options;
 using System.Net;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Yarp.ReverseProxy.Configuration;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,7 +29,24 @@ builder.Services.AddSingleton<GroqService>();
 builder.Services.Configure<MongoDBSettings>(
     builder.Configuration.GetSection("MongoDBSettings"));
 
-builder.Services.AddSingleton<EmailService>();
+// In your service configuration section, replace the existing EmailService registration with:
+builder.Services.AddSingleton<EmailService>(sp => 
+{
+    var settings = sp.GetRequiredService<IOptions<MongoDBSettings>>();
+    var logger = sp.GetRequiredService<ILogger<EmailService>>();
+    var cache = sp.GetRequiredService<IDistributedCache>();
+    return new EmailService(settings, logger, cache);
+});
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetValue<string>("Redis:ConnectionString", "localhost:6379");
+    options.InstanceName = builder.Configuration.GetValue<string>("Redis:InstanceName", "SentimatrixCache_");
+});
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(
+    builder.Configuration.GetValue<string>("Redis:ConnectionString", "localhost:6379")
+));
 
 // Register MongoClient and IMongoDatabase
 builder.Services.AddSingleton<IMongoClient>(sp =>
@@ -75,6 +95,8 @@ builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 
 var app = builder.Build();
+
+
 
 // Configure the HTTP request pipeline.
 app.UseSwagger();
